@@ -5,12 +5,19 @@
 # Tesla Fleet Telemetry
 ---------------------------------
 
-Fleet Telemetry is a simple, scalable, and secure data exchange for device fleets.
+At Tesla we believe that security and privacy should be in the center of any modern technology. We want each and everyone of our customers to decide for themselves what data they share with third parties, how they share it and when it can be shared. We've developped a decentralized framework that allows customers to create a secure and direct brige from their Tesla devices to any provider they authorize.
 
-Clients establish a websocket connection to push configurable telemetry records. Telemetry provides clients with ack, error, or rate limit responses.
+Fleet Telemetry is meant to be the service implementation providers can run at the recieving hand. The service will handle connectivity with the vehicles and other devices, receive and store data they transmit. In other words, Fleet Telemetry is a simple, scalable, and secure data exchange service for devices. Once configured to do so, devices can establish a websocket connection to push configurable telemetry records. Fleet Telemetry provides clients with ack, error, or rate limit responses.
 
 
 ## Configuring and running the service
+
+As a service provider you will need to register a publically available endpoint on the internet so vehicles (or other devices) can connect to it. Tesla devices will rely on mutual TLS (mTLS) websocket to accept creating a connection with the backend. Here's the step you need to follow in order to get the service up and running. The application has been desgined to operate on top of kubernetes but you can run in as a standalone binary if it's what you would like.
+
+### Install on kubernetes with Helm Chart (recommended)
+Please follow these [instructions](https://github.com/teslamotors/helm-charts/blob/main/charts/fleet-telemetry/README.md)
+
+### Manual install (Skip this if you have installed with Helm on Kubernetes)
 1. Allocate and assign a [FQDN](https://en.wikipedia.org/wiki/Fully_qualified_domain_name), this will be used in the server and client (vehicle) configuration.
 
 2. Design a simple hosting architecture.  We recommend: Firewall/Loadbalancer -> Fleet Telemetry -> Kafka.
@@ -113,10 +120,7 @@ spec:
 ```
 Example: [client_config.json](./examples/client_config.json)
 
-## Install with Helm Chart
-Please follow these [instructions](https://github.com/teslamotors/helm-charts/blob/main/charts/fleet-telemetry/README.md)
-
-### With pubsub
+### Using Google pubsub instead of Kafka (optional)
 - Along with the required pubsub config (See ./test/integration/config.json for example), be sure to set the environment variable `GOOGLE_APPLICATION_CREDENTIALS`
 
 
@@ -127,7 +131,7 @@ Prometheus or a statsd interface supporting data store for metrics
 
 # Protos
 
-These represent different message types.  
+Data is encapsulated into protobuf messages of different types. We do not recommend making changes but if you need to recompile them you can always do so with:
 
 To generate:
 1. install protoc, currently on version 3.21.12: https://grpc.io/docs/protoc-installation/
@@ -200,7 +204,7 @@ docker buildx build --no-cache --progress=plain --platform linux/amd64 -t <name:
 container_id=$(docker create fleet-telemetry:local.1.1) docker cp $container_id:/fleet-telemetry /tmp/fleet-telemetry
 ```
 
-## Security and privacy considerations
+## Security and Privacy considerations
 
 System administrators should apply standard best practices, which are beyond
 the scope of this README.
@@ -222,3 +226,7 @@ Moreover, the following application-specific considerations apply:
 * If telemetry data is compromised, threat actors may be able to make
   inferences about driver behavior even if explicit location data is not
   collected. Security policies should be set accordingly.
+* Tesla strongly encourages providers to only collect data they need, limited to
+  frequency that they need.
+* Providers agree to take full responsibility for privacy risks, as soon as data
+  leave the devices (for more info read our privacy policies).
