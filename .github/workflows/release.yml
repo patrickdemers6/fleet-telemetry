@@ -1,0 +1,35 @@
+name: Attach Assets to Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  CGO_ENABLED: 1
+
+jobs:
+  release-go-binary:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up protoc
+      run: |
+        wget https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protoc-25.1-linux-x86_64.zip
+        unzip protoc-25.1-linux-x86_64.zip
+        sudo mv bin/protoc /usr/local/bin/protoc
+        sudo mv include/* /usr/local/include/
+    - name: install pkg-config
+      run: sudo apt-get install pkg-config
+    - name: Install protoc-gen-go
+      run: go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28.1
+    - uses: thatisuday/go-cross-build@v1.0.2
+      with:
+        platforms: 'linux/amd64, linux/arm64'
+        package: "cmd/main"
+        name: "fleet-telemetry"
+        dest: 'dest'
