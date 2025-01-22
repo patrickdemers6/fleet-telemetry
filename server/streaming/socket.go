@@ -179,16 +179,14 @@ func (sm *SocketManager) ProcessTelemetry(serializer *telemetry.BinarySerializer
 
 	sm.logger.ActivityLog("socket_connected", sm.requestInfo)
 	go sm.writer()
+
 	var rl *rate.RateLimiter
-
-	if sm.config.RateLimit != nil && sm.config.RateLimit.Enabled {
-		rl = rate.New(sm.config.RateLimit.MessageLimit, sm.config.RateLimit.MessageIntervalTimeSecond)
-	} else {
-		rl = rate.New(100, 60*time.Second)
-	}
-
 	var rateLimitStartTime time.Time
-	messagesRateLimited := 0
+	var messagesRateLimitedCount int
+	rateLimitingEnabled := sm.config.RateLimit != nil && sm.config.RateLimit.Enabled
+	if rateLimitingEnabled {
+		rl = rate.New(sm.config.RateLimit.MessageLimit, sm.config.RateLimit.MessageIntervalTimeSecond)
+	}
 
 	// infinite loop until the client disconnects (keep accepting new messages)
 	for {
@@ -197,28 +195,28 @@ func (sm *SocketManager) ProcessTelemetry(serializer *telemetry.BinarySerializer
 			return
 		}
 
-		// check rate limit
-		if ok, _ := rl.Try(); !ok {
-			if messagesRateLimited == 0 {
-				rateLimitStartTime = time.Now()
-			}
-			// client exceeded the rate limit
-			messagesRateLimited++
-			record, _ := telemetry.NewRecord(serializer, message, sm.UUID, sm.transmitDecodedRecords)
-			metricsRegistry.rateLimitExceededCount.Inc(map[string]string{"device_id": sm.requestIdentity.DeviceID, "txtype": record.TxType})
-			if sm.config.RateLimit != nil && sm.config.RateLimit.Enabled {
+		if rateLimitingEnabled {
+			if ok, _ := rl.Try(); !ok {
+				if messagesRateLimitedCount == 0 {
+					rateLimitStartTime = time.Now()
+				}
+				messagesRateLimitedCount++
+				record, _ := telemetry.NewRecord(serializer, message, sm.UUID, sm.transmitDecodedRecords)
+				metricsRegistry.rateLimitExceededCount.Inc(map[string]string{"device_id": sm.requestIdentity.DeviceID, "txtype": record.TxType})
 				continue
 			}
-		}
-		if messagesRateLimited > 0 {
-			parts := bytes.Split(message, []byte(","))
-			if len(parts) > 2 {
-				duration := time.Since(rateLimitStartTime) / time.Second
 
-				sm.logger.ErrorLog("rate_limit_exceeded", nil, logrus.LogInfo{"txid": parts[2], "duration_sec": duration, "messages_rate_limited": messagesRateLimited})
+			if messagesRateLimitedCount > 0 {
+				parts := bytes.Split(message, []byte(","))
+				if len(parts) > 2 {
+					duration := time.Since(rateLimitStartTime) / time.Second
+	
+					sm.logger.ErrorLog("rate_limit_exceeded", nil, logrus.LogInfo{"txid": parts[2], "duration_sec": duration, "messages_rate_limited": messagesRateLimitedCount})
+				}
+				messagesRateLimitedCount = 0
 			}
-			messagesRateLimited = 0
 		}
+
 		sm.ParseAndProcessRecord(serializer, message)
 	}
 }
